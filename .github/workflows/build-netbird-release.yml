@@ -22,14 +22,20 @@ jobs:
           distribution: 'temurin'
           java-version: '11'
 
-      - name: Install Android SDK components
-        uses: android-actions/setup-android@v2
-        with:
-          api-level: 34
-          ndk: "23.1.7779620"
-          cmake: "3.22.1"
+      # Android SDK (stable)
+      - name: Set up Android SDK
+        uses: reactivecircus/android-sdk@v1
 
-      # Ricostruzione del keystore Android da BASE64
+      # Install platform + build tools + NDK + CMake
+      - name: Install required Android components
+        run: |
+          sdkmanager "platform-tools" \
+                     "platforms;android-34" \
+                     "build-tools;34.0.0" \
+                     "ndk;23.1.7779620" \
+                     "cmake;3.22.1"
+
+      # Ricostruzione keystore
       - name: Decode Keystore
         run: |
           mkdir -p android/app
