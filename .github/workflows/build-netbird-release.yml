@@ -11,20 +11,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout con submodules (serve per gomobile + librerie incluse)
+      # Checkout repository with submodules
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      # Java 11 richiesto dal progetto e da gomobile
+      # Java 11 is required by gomobile + NetBird
       - name: Set up JDK 11
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '11'
 
-      # Installazione manuale CommandLineTools compatibili con Java 11
+      ###########################################################
+      # Install Android SDK (command-line tools compatible with Java 11)
+      ###########################################################
       - name: Install Android SDK (manual, Java 11 compatible)
         run: |
           wget https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmd.zip
@@ -36,7 +38,9 @@ jobs:
           echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH" >> $GITHUB_ENV
 
-      # Installazione componenti Android via sdkmanager
+      ###########################################################
+      # Install Android build tools, NDK and CMake
+      ###########################################################
       - name: Install Android components
         run: |
           yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
@@ -47,19 +51,22 @@ jobs:
           $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620"
           $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1"
 
-      # Ricostruzione keystore
+      ###########################################################
+      # Decode Keystore
+      ###########################################################
       - name: Decode Keystore
         run: |
           mkdir -p android/app
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-keystore.jks
 
-      # Installazione GO
+      ###########################################################
+      # Install Go and gomobile
+      ###########################################################
       - name: Install Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.22'
 
-      # Installazione gomobile e tool Go
       - name: Install gomobile
         run: |
           go install golang.org/x/mobile/cmd/gomobile@latest
@@ -67,13 +74,27 @@ jobs:
           echo "PATH=$(go env GOPATH)/bin:$PATH" >> $GITHUB_ENV
           gomobile init
 
-      # Build libreria Go mobile
+      ###########################################################
+      # Force gomobile to use the correct NDK (not the runner’s NDK 27)
+      ###########################################################
+      - name: Export correct NDK path for gomobile
+        run: |
+          echo "ANDROID_NDK_HOME=$HOME/android-sdk/ndk/23.1.7779620" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$HOME/android-sdk/ndk/23.1.7779620" >> $GITHUB_ENV
+          echo "NDK_HOME=$HOME/android-sdk/ndk/23.1.7779620" >> $GITHUB_ENV
+          echo "PATH=$HOME/android-sdk/ndk/23.1.7779620:$PATH" >> $GITHUB_ENV
+
+      ###########################################################
+      # Build Go Mobile library
+      ###########################################################
       - name: Build Go Mobile library
         run: |
           chmod +x ./build-android-lib.sh
           ./build-android-lib.sh
 
-      # Configurazione firma per build Gradle
+      ###########################################################
+      # Gradle signing setup
+      ###########################################################
       - name: Configure Release Signing
         working-directory: android/app
         run: |
@@ -82,14 +103,18 @@ jobs:
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> keystore.properties
           echo "keyPassword=${{ secrets.ANDROID_KEY_ALIAS_PASSWORD }}" >> keystore.properties
 
-      # Build APK Release firmato
+      ###########################################################
+      # Build the APK (Release + Signed)
+      ###########################################################
       - name: Build Signed Release APK
         working-directory: android
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --stacktrace
 
-      # Upload APK firmato come artifact
+      ###########################################################
+      # Upload signed APK
+      ###########################################################
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
