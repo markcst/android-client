@@ -11,48 +11,55 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout con submodules (serve per gomobile + librerie incluse)
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: true
 
+      # Java 11 richiesto dal progetto e da gomobile
       - name: Set up JDK 11
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '11'
 
-      # Manual Android SDK install (compatible with Java 11)
-      - name: Install Android SDK (manual)
+      # Installazione manuale del vecchio Android SDK Tools (compatibile con Java 11)
+      - name: Install Android SDK (manual, Java 11 compatible)
         run: |
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdtools.zip
+          wget https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmd.zip
           mkdir -p $HOME/android-sdk/cmdline-tools
-          unzip -q cmdtools.zip -d $HOME/android-sdk/cmdline-tools
+          unzip -q cmd.zip -d $HOME/android-sdk/cmdline-tools
           mv $HOME/android-sdk/cmdline-tools/cmdline-tools $HOME/android-sdk/cmdline-tools/latest
 
-          echo "export ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "export ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "export PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH" >> $GITHUB_ENV
 
+      # Installazione precisa di tutti i componenti necessari via sdkmanager
       - name: Install Android components
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-34"
-          sdkmanager "build-tools;34.0.0"
-          sdkmanager "ndk;23.1.7779620"
-          sdkmanager "cmake;3.22.1"
+          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
 
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools"
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-34"
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0"
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620"
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1"
+
+      # Ricostruzione del keystore in locale
       - name: Decode Keystore
         run: |
           mkdir -p android/app
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-keystore.jks
 
+      # Build della libreria Go mobile (necessaria per NetBird)
       - name: Build Go Mobile library
         run: |
           chmod +x ./build-android-lib.sh
           ./build-android-lib.sh
 
+      # Configurazione file keystore.properties per Gradle
       - name: Configure Release Signing
         working-directory: android/app
         run: |
@@ -61,12 +68,14 @@ jobs:
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> keystore.properties
           echo "keyPassword=${{ secrets.ANDROID_KEY_ALIAS_PASSWORD }}" >> keystore.properties
 
+      # Build release firmata
       - name: Build Signed Release APK
         working-directory: android
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --stacktrace
 
+      # Upload dell’APK firmato come artifact
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
