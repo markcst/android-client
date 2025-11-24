@@ -29,9 +29,9 @@ jobs:
           java-version: '17'
 
       ###########################################################
-      # Install Android SDK Tools (compatibili con Java 17)
+      # Install Android SDK Tools
       ###########################################################
-      - name: Install Android SDK (manual, Java 11 compatible)
+      - name: Install Android SDK (manual)
         run: |
           wget https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmd.zip
           mkdir -p $HOME/android-sdk/cmdline-tools
@@ -56,12 +56,13 @@ jobs:
           $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1"
 
       ###########################################################
-      # Ricostruzione keystore in app/
+      # Ricostruzione keystore in app/release.keystore
       ###########################################################
       - name: Decode Keystore
         run: |
           mkdir -p app
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > app/release-keystore.jks
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > app/release.keystore
+          ls -l app
 
       ###########################################################
       # Install Go
@@ -82,7 +83,7 @@ jobs:
           gomobile init
 
       ###########################################################
-      # Forza gomobile ad usare l'NDK 23 (non quello preinstallato)
+      # Forza gomobile ad usare l'NDK 23
       ###########################################################
       - name: Export correct NDK path for gomobile
         run: |
@@ -100,20 +101,15 @@ jobs:
           ./build-android-lib.sh
 
       ###########################################################
-      # Configurazione firma (keystore.properties in app/)
-      ###########################################################
-      - name: Configure Release Signing
-        working-directory: app
-        run: |
-          echo "storeFile=release-keystore.jks" > keystore.properties
-          echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> keystore.properties
-          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> keystore.properties
-          echo "keyPassword=${{ secrets.ANDROID_KEY_ALIAS_PASSWORD }}" >> keystore.properties
-
-      ###########################################################
       # Build APK di release firmato
+      # -> qui passiamo le NETBIRD_UPLOAD_* che usa app/build.gradle.kts
       ###########################################################
       - name: Build Signed Release APK
+        env:
+          NETBIRD_UPLOAD_STORE_FILE: app/release.keystore
+          NETBIRD_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          NETBIRD_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          NETBIRD_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_ALIAS_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --stacktrace
