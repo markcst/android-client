@@ -24,7 +24,7 @@ jobs:
           distribution: 'temurin'
           java-version: '11'
 
-      # Installazione manuale del vecchio Android SDK Tools (compatibile con Java 11)
+      # Installazione manuale CommandLineTools compatibili con Java 11
       - name: Install Android SDK (manual, Java 11 compatible)
         run: |
           wget https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmd.zip
@@ -36,7 +36,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH" >> $GITHUB_ENV
 
-      # Installazione precisa di tutti i componenti necessari via sdkmanager
+      # Installazione componenti Android via sdkmanager
       - name: Install Android components
         run: |
           yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
@@ -47,19 +47,33 @@ jobs:
           $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620"
           $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1"
 
-      # Ricostruzione del keystore in locale
+      # Ricostruzione keystore
       - name: Decode Keystore
         run: |
           mkdir -p android/app
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release-keystore.jks
 
-      # Build della libreria Go mobile (necessaria per NetBird)
+      # Installazione GO
+      - name: Install Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+
+      # Installazione gomobile e tool Go
+      - name: Install gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          echo "PATH=$(go env GOPATH)/bin:$PATH" >> $GITHUB_ENV
+          gomobile init
+
+      # Build libreria Go mobile
       - name: Build Go Mobile library
         run: |
           chmod +x ./build-android-lib.sh
           ./build-android-lib.sh
 
-      # Configurazione file keystore.properties per Gradle
+      # Configurazione firma per build Gradle
       - name: Configure Release Signing
         working-directory: android/app
         run: |
@@ -68,14 +82,14 @@ jobs:
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> keystore.properties
           echo "keyPassword=${{ secrets.ANDROID_KEY_ALIAS_PASSWORD }}" >> keystore.properties
 
-      # Build release firmata
+      # Build APK Release firmato
       - name: Build Signed Release APK
         working-directory: android
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --stacktrace
 
-      # Upload dell’APK firmato come artifact
+      # Upload APK firmato come artifact
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
