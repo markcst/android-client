@@ -55,7 +55,7 @@ jobs:
           ./gradlew assembleRelease --stacktrace
 
       - name: Upload Release APK
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: netbird-android-release-apk
           path: android/app/build/outputs/apk/release/*.apk
